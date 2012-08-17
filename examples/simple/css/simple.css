@@ -1,0 +1,137 @@
+/**
+ * Kayako search
+ */
+
+div {
+	display: block;
+	position: relative;
+}
+
+div#esbb-simple-app {
+	position: relative;
+}
+
+div#esbb-simple-header {
+	border-bottom: 1px solid #ccc;
+	padding: 20px 30px;
+}
+div#esbb-simple-left-col, div#esbb-simple-center-col, div#esbb-simple-right-col {
+	box-sizing: border-box;
+	-moz-box-sizing:border-box;
+	-webkit-box-sizing:border-box;
+	-ms-box-sizing:border-box;
+}
+div#esbb-simple-left-col {
+	width: 25%;
+	padding: 20px 30px;
+	display: block;
+	float: left;
+	border-right: 1px solid #ccc;
+}
+div#esbb-simple-center-col {
+	width: 65%;
+	padding: 20px 30px;
+	float: left;
+}
+
+div#esbb-simple-right-col {
+	width: 10%;
+	padding: 20px 30px;
+	display: block;
+	float: left;
+}
+
+a.esbb-search-button {
+	border: 1px solid #CCC;
+	border-radius: 12px;
+	background: #ffffff; /* Old browsers */
+	background: -moz-linear-gradient(top,  #ffffff 0%, #ededed 100%); /* FF3.6+ */
+	background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#ffffff), color-stop(100%,#ededed)); /* Chrome,Safari4+ */
+	background: -webkit-linear-gradient(top,  #ffffff 0%,#ededed 100%); /* Chrome10+,Safari5.1+ */
+	background: -o-linear-gradient(top,  #ffffff 0%,#ededed 100%); /* Opera 11.10+ */
+	background: -ms-linear-gradient(top,  #ffffff 0%,#ededed 100%); /* IE10+ */
+	background: linear-gradient(top,  #ffffff 0%,#ededed 100%); /* W3C */
+	filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#ffffff', endColorstr='#ededed',GradientType=0 ); /* IE6-9 */
+	text-shadow: 0 1px 0 white;
+	color: #333;
+	font: 12px sans-serif !important;
+	font-weight: bold !important;
+	text-decoration: none !important;
+	-webkit-border-radius: 11px !important;
+	-khtml-border-radius: 11px !important;
+	-moz-border-radius: 11px !important;
+	border-radius: 11px !important;
+	margin: 0 !important;
+	outline: none;
+	display: inline-block;
+	padding: 3px 10px;
+	cursor: pointer;
+}
+.esbb-search-query {
+	width: 500px;
+	margin-right: 5px;
+}
+.esbb-search-url {
+	background: #ddd;
+	margin-left: 45px;
+	width: 475px;
+	padding: 5px 5px 5px 5px;
+}
+#esbb-simple-search-filters div.select2-container {
+	vertical-align: middle;
+}
+#esbb-simple-search-results h3 {
+	margin-bottom: 3em;
+}
+.esbb-result {
+	word-wrap: break-word;
+	margin-bottom: 3em;
+}
+.esbb-result>.esbb-result-title>a {
+	font-weight: bold;
+	font-size: 1.17em;
+	display: block;
+}
+
+div#esbb-simple-left-col li {
+	font-size: 90%;
+  list-style: none;
+}
+div#esbb-simple-left-col ul {
+  padding-left: 0px;
+}
+
+div.esbb-pie {
+	max-height: 150px;
+}
+
+div.esbb-timeline {
+	width: 600px;
+	height: 400px;
+}
+
+div.esbb-timeline div {
+	position: static;
+}
+
+div.esbb-pie {
+	width: 159px;
+	height: 159px;
+	margin-bottom: 30px;
+}
+
+div.esbb-pie div {
+	position: static;
+}
+
+table.esbb-facet-selector-table {
+	width: 100%;
+}
+table.esbb-facet-selector-table td {
+	padding: 0px;
+	margin: 0px;
+}
+
+table.esbb-facet-selector-table td.esbb-count {
+	font-size: 90%;
+}
