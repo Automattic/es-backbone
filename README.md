@@ -20,6 +20,25 @@ In the examples directory is a simple example (but it has no server to work with
 
 If you have a public ES endpoint I'd love to have a working example to show off in this repository.
 
+
+Rough description of the Backbone Objects
+-----------------------------------------
+
+Models:
+- Search Results Model: esbbSearchResultsModel
+- Search Query Model: esbbSearchQueryModel
+
+Views:
+- View for search query input: esbbSearchBarView
+- View for displaying search results: esbbSearchResultsView
+- View for a timeline of search results (date histogram facet): esbbSearchFacetTimelineView
+- View for a pie chart of search results (term and range facets): esbbSearchFacetPieView
+- View for values of a single facet (term facet)esbbSearchFacetSelectView
+- View for adding/removing filters: esbbSearchFilterSelectView
+- View for adding a date range filter: esbbSearchDateRangePickerView
+- View for creating a URL to the current page: esbbSearchURLView
+
+
 Versions
 --------
 
