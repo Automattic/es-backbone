@@ -37,10 +37,20 @@ Views:
 - View for adding/removing filters: esbbSearchFilterSelectView
 - View for adding a date range filter: esbbSearchDateRangePickerView
 - View for creating a URL to the current page: esbbSearchURLView
-
+ 
 
 Versions
 --------
+
+pre-0.2: Many improvements to the lib, but haven't yet update the example code
+- added view for sorting results: esbbSortView
+- added esbbSearchFilterTermsSelectorView to have one text entry field per filter rather than a single box for all filters
+- added pushstate support to modify URL in address bar
+- Timeline View can be displayed with the bars shown horizontally so it can fit in the sidebar
+- some changes to search results formatting
+- fixed bugs in search spinner, fades out old results while new search in process
+- Number of results properly displayed
+- added debugging info on query syntax errors
 
 0.1 Initial Release. Works for me. ;)
 

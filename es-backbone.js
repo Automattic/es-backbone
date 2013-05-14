@@ -3,6 +3,7 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 	index: '',
 	index_type: '',
 	resultsModel: null,
+	searching: false,
 	
 	initialize: function() {
 	},
@@ -10,6 +11,7 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 	search : function() {
 		var t = this;
 		this.trigger( 'search:start' );
+		this.searching = true;
 
 		$.ajax( {
 			url: t.ajax_url,
@@ -21,6 +23,7 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 			},
 			success: function(json, statusText, xhr) {
 				var data = $.parseJSON( json );
+				//console.log( data );
 				t.resultsModel.hasResults = true;
 				t.resultsModel.hasError = false;
 				t.resultsModel.set( data );
@@ -32,8 +35,12 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 				console.error( xhr );
 				t.resultsModel.hasResults = false;
 				t.resultsModel.hasError = true;
-				t.resultsModel.set( null );
+				if ( xhr.responseText.match(/SearchPhaseExecutionException.+Failed to parse query/) )
+					t.resultsModel.set( { error: 'Improperly formatted query. <a href="http://lucene.apache.org/core/old_versioned_docs/versions/2_9_1/queryparsersyntax.html" target="_blank">Check out the Lucene Query Syntax</a>.' } );
+				else
+					t.resultsModel.set( $.parseJSON( xhr.responseText ) );
 				t.trigger( 'search:end' );
+				this.searching = false;
 			}
 		} );
 	},
@@ -47,6 +54,17 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 	getQueryString: function() {
 		var curr = this.toJSON();
 		return curr.query.filtered.query.query_string.query;
+	},
+
+	setSort: function( sort ) {
+		var curr = this.toJSON();
+		curr.sort = sort;
+		this.set( curr, { silent: true } );
+	},
+
+	getSort: function() {
+		var curr = this.toJSON();
+		return curr.sort;
 	},
 
 	setDateHistInterval: function( facet_name, interval ) {
@@ -109,6 +127,26 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 			curr_filt.push( { term: a } );
 		} );
 		this.updateFilters( curr_filt );
+	},
+
+	setTermFilters: function( facetName, list ) {
+		var curr_filt = this.getFiltersForChanging();
+		var new_filt = [];
+
+		//remove all filters of this type
+		_.each( curr_filt, function( val ) {
+			if ( !val.term || ! val.term[facetName] )
+				new_filt.push( val );
+		});
+
+		//now add them in from the list
+		_.each( list, function( val ) {
+			var a = {};
+			a[ val.field ] = val.term;
+			new_filt.push( { term: a } );
+		});
+
+		this.updateFilters( new_filt );
 	},
 
 	addTermFilter: function( field, term ) {
@@ -200,11 +238,11 @@ var esbbSearchResultsModel = Backbone.Model.extend({
 var esbbSearchResultsView = Backbone.View.extend({
 	el: '#esbb-results-set',
 	header: 'Search Results',
-	number: 40,
 	highlightField: 'content',
 	default_data: {},
+	queryModel: null,
 	template: '\
-		<h3>{{header}} [{{number}}/{{total}}]</h3>\
+		<h4>{{total}} Results</h4>\
 		{{#hits}}\
 		<p class="esbb-result"> \
 			<span class="esbb-result-title"><a href="{{fields.url}}">{{fields.title}}</a><span><br />\
@@ -214,18 +252,28 @@ var esbbSearchResultsView = Backbone.View.extend({
 		{{/hits}}\
 		',
 	templateNoResults: '\
-		<h3>{{header}}</h3>\
-		<p><b>No Results</b></p>\
+		<h4>No Results</h4>\
+		',
+	templateError: '\
+		<h4>Elasticsearch Server Error</h4>\
+		<p>{{& error}}</p>\
 		',
 
 	initialize: function() {
+		this.queryModel = this.options.queryModel;
 		if ( this.options.template )
 			this.template = this.options.template;
 		if ( this.options.default_data )
 			this.default_data = this.options.default_data;
 		if ( this.options.highlightField )
 			this.highlightField = this.options.highlightField;
+		if ( this.options.headerName )
+			this.header = this.options.headerName;
 		this.model.bind( 'change', this.render, this );
+		if ( this.queryModel ) {
+			this.queryModel.bind('search:start', this.searchStarted, this );
+			this.queryModel.bind('search:end', this.searchEnded, this );
+		}
 		this.render();
 	},
 	
@@ -233,7 +281,7 @@ var esbbSearchResultsView = Backbone.View.extend({
 		var t = this;
 		this.$el.empty();
 		var results = this.model.toJSON();
-		if ( ( results.hits != undefined ) && ( 0 != results.hits.total ) ) {
+		if ( t.model.hasResults && ( results.hits != undefined ) && ( 0 != results.hits.total ) ) {
 			for ( hit in results.hits.hits ) {
 				if ( ( results.hits.hits[ hit ].highlight != undefined ) && ( typeof results.hits.hits[ hit ].highlight != 'string' ) ) {
 					results.hits.hits[ hit ].highlight[ this.highlightField ] = results.hits.hits[ hit ].highlight[ this.highlightField ].join( '...' );
@@ -242,14 +290,24 @@ var esbbSearchResultsView = Backbone.View.extend({
 			var data = this.default_data;
 			data.header = this.header;
 			data.hits = results.hits.hits;
-			data.number = this.number;
 			data.total = results.hits.total;
 
 			this.$el.append( Mustache.render( this.template, data ) );
 		} else {
-			this.$el.append( Mustache.render( this.templateNoResults, { header: this.header } ) );
+			if ( t.model.hasError ) 
+				this.$el.append( Mustache.render( this.templateError, results ) );
+			else
+				this.$el.append( Mustache.render( this.templateNoResults, { header: this.header } ) );
 		}
-	}
+	},
+
+	searchStarted: function() {
+		this.$el.fadeTo( 200, 0.4 );
+	},
+
+	searchEnded: function() {
+		this.$el.fadeTo( 100, 1 );
+	},
 
 });
 
@@ -257,9 +315,15 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 	facetName: '',
 	searchQueryModel: null,
 	facetInterval: 1,
+	horizontal: false,
+	templateNoResults: '\
+		<p>No results.</p>\
+		',
 
 	initialize: function() {
 		this.facetName = this.options.facetName;
+		if ( this.options.horizontal )
+			this.horizontal = this.options.horizontal;
 		this.searchQueryModel = this.options.searchQueryModel;
 		this.model.bind( 'change', this.render, this );
 		this.render();
@@ -275,7 +339,10 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 		this.$el.show();
 
 		var data = _.map( this.model.get('facets')[this.facetName].entries, function( d ) {
-			return [ d.time, d.count ];
+			if ( t.horizontal )
+				return [ d.count, d.time ];
+			else
+				return [ d.time, d.count ];
 		});
 
 		var facet = this.searchQueryModel.getFacet( this.facetName );
@@ -293,20 +360,38 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 			}
 		}
 
-		var options = {
-			xaxis: { mode: "time", tickLength: 5 },
-			selection: { mode: "x" },
-			grid: { 
-				hoverable: true,
-				clickable: true
-			 },
-			series: { 
-				bars: { 
-					show: true,
-					barWidth: 24 * 60 * 60 * 1000 * this.facetInterval
+		if ( this.horizontal ) {
+			var options = {
+				yaxis: { mode: "time", tickLength: 5 },
+				selection: { mode: "y" },
+				grid: { 
+					hoverable: true,
+					clickable: true
+				 },
+				series: { 
+					bars: { 
+						show: true,
+						horizontal: true,
+						barWidth: 24 * 60 * 60 * 1000 * this.facetInterval
+					}
 				}
-			}
-		};
+			};
+		} else {
+			var options = {
+				xaxis: { mode: "time", tickLength: 5 },
+				selection: { mode: "x" },
+				grid: { 
+					hoverable: true,
+					clickable: true
+				 },
+				series: { 
+					bars: { 
+						show: true,
+						barWidth: 24 * 60 * 60 * 1000 * this.facetInterval
+					}
+				}
+			};
+		}
 
 		if ( this.facetInterval == 1 )
 			options.grid.markings = this.weekendAreas;
@@ -314,32 +399,35 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 		$.plot( this.$el, [ data ], options );
 
 		this.$el.bind( "plotselected", function ( event, ranges ) {
-			var st_date = new Date( ranges.xaxis.from );
-			if ( ranges.xaxis.to - ranges.xaxis.from < 24*60*60*1000 * t.facetInterval )
-				var end_date = new Date( ranges.xaxis.from + 24*60*60*1000 * t.facetInterval );
+			var sel_axis = this.horizontal ? ranges.yaxis : ranges.xaxis;
+			var st_date = new Date( sel_axis.from );
+			if ( ranges.xaxis.to - sel_axis.from < 24*60*60*1000 * t.facetInterval )
+				var end_date = new Date( sel_axis.from + 24*60*60*1000 * t.facetInterval );
 			else
-				var end_date = new Date( ranges.xaxis.to );
+				var end_date = new Date( sel_axis.to );
 
 			t.setRangeFilter( st_date, end_date );
 			return true;
 		});
 
 		this.$el.bind( "plotclick", function ( event, pos, item ) {
+			var idx = t.horizontal ? 1 : 0;
 			if (item) {
-				var st_date = new Date( item.datapoint[0] );
-				var end_date = new Date( item.datapoint[0] + 24*60*60*1000 * t.facetInterval );
+				var st_date = new Date( item.datapoint[idx] );
+				var end_date = new Date( item.datapoint[idx] + 24*60*60*1000 * t.facetInterval );
 				t.setRangeFilter( st_date, end_date );
 			}
 			return true;
 		});
 
 		this.$el.bind( "plothover", function ( event, pos, item ) {
+			var idx = t.horizontal ? 1 : 0;
 			if (item) {
-				var st_date = t.formatDate( new Date( item.datapoint[0] ) );
+				var st_date = t.formatDate( new Date( item.datapoint[idx] ) );
 				if ( t.facetInterval == 1 ) {
 					var str = st_date;
 				} else {
-					var end_date = t.formatDate( new Date( item.datapoint[0] + 24*60*60*1000 * t.facetInterval ) );
+					var end_date = t.formatDate( new Date( item.datapoint[idx] + 24*60*60*1000 * t.facetInterval ) );
 					var str = st_date + ' - ' + end_date;
 				}
 				if ( ! t.hover_el )
@@ -368,7 +456,8 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 	// helper for returning the weekends in a period
 	weekendAreas: function( axes ) {
 		var markings = [];
-		var d = new Date(axes.xaxis.min);
+		var sel_axis = this.horizontal ? axes.yaxis : axes.xaxis;
+		var d = new Date(sel_axis.min);
 		// go to the first Saturday
 		d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 1) % 7))
 		d.setUTCSeconds(0);
@@ -378,9 +467,12 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 		do {
 			// when we don't set yaxis, the rectangle automatically
 			// extends to infinity upwards and downwards
-			markings.push({ xaxis: { from: i, to: i + 2 * 24 * 60 * 60 * 1000 } });
+			if ( this.horizontal )
+				markings.push({ yaxis: { from: i, to: i + 2 * 24 * 60 * 60 * 1000 } });
+			else
+				markings.push({ xaxis: { from: i, to: i + 2 * 24 * 60 * 60 * 1000 } });
 			i += 7 * 24 * 60 * 60 * 1000;
-		} while (i < axes.xaxis.max);
+		} while (i < sel_axis.max);
 
 		return markings;
 	},
@@ -553,7 +645,7 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 	headerName: '',
 	searchQueryModel: null,
 	template: '\
-		<h3>{{header}}</h3>\
+		<h4>{{header}}</h4>\
 		<table class="esbb-facet-selector-table">\
 		{{#items}}\
 			<tr><td><a class="esbb-facet-item" href="{{name}}"><b>{{name}}</b></a></td><td align="right" width="100" class="esbb-count">{{count}}</td><td align="right" width="100" class="esbb-count">{{perc}}%</td></tr>\
@@ -564,7 +656,7 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 		</table>\
 		',
 	templateNoResults: '\
-		<h3>{{header}}</h3>\
+		<h4>{{header}}</h4>\
 		<p>No results.</p>\
 		',
 
@@ -628,7 +720,7 @@ var esbbSearchFilterSelectView = Backbone.View.extend({
 	avail_fields: [],
 	template: '\
 			<p>Filters:\
-			<input type="hidden" id="{{input_el_id}}" style="width: 600px; " value="">\
+			<input type="hidden" id="{{input_el_id}}" value="">\
 			</p>\
 			<p class="esbb-filter-sel-error" style="display:none; color:red"></p>\
 			',
@@ -713,7 +805,7 @@ var esbbSearchFilterSelectView = Backbone.View.extend({
 
 var esbbSearchDateRangePickerView = Backbone.View.extend({
 	headerName: '',
-	template: '<p>{{header}}: <input class="esbb-date-range-start" type="text" /> to <input class="esbb-date-range-end" type="text" /></p>',
+	template: '<div class="esbb-date-range-header">{{header}}</div> <div class="esbb-date-range-input"><input class="esbb-date-range-start" type="text" /> <input class="esbb-date-range-end" type="text" /></div>',
 
 	events : {
 	},
@@ -747,22 +839,26 @@ var esbbSearchDateRangePickerView = Backbone.View.extend({
 			defaultDate: "-6m",
 			dateFormat: 'yy-mm-dd',
 			changeMonth: true,
-			numberOfMonths: 3
+			numberOfMonths: 1
 		});
 
 		t.end_picker.datepicker({
 			defaultDate: null,
 			dateFormat: 'yy-mm-dd',
 			changeMonth: true,
-			numberOfMonths: 3
+			numberOfMonths: 1
 		});
 
 		t.start_picker.change( function () {
 			t.setRangeFilter();
+			t.model.trigger( 'change' );
+			t.model.search();
 		} );
 
 		t.end_picker.change( function () {
 			t.setRangeFilter();
+			t.model.trigger( 'change' );
+			t.model.search();
 		} );
 
 	},
@@ -794,11 +890,79 @@ var esbbSearchDateRangePickerView = Backbone.View.extend({
 
 });
 
+var esbbSearchFilterTermsSelectorView = Backbone.View.extend({
+	select_el: '',
+	select_$el: null,
+	headerName: '',
+	facetName: '',
+	avail_fields: [],
+	template: '<div class="esbb-filter-header">{{header}}</div><input id="{{input_el_id}}" class="esbb-filter-terms" type="text"/>',
+
+	events: {
+	},
+
+	initialize: function() {
+		this.select_el = this.el.id + '-input';
+		this.headerName = this.options.headerName;
+		this.facetName = this.options.facetName;
+		this.avail_fields = this.options.avail_fields;
+		_.bindAll( this, 'render' );
+		this.model.bind('change', this.render, this );
+		this.render();
+	},
+	
+	render: function() {
+		var t = this;
+		if ( this.select_$el )
+			this.select_$el.select2('destroy');
+		this.$el.empty();
+	
+		var filters = this.model.getFilters();
+		var tags = [];
+		for ( var i in filters ) {
+			if ( typeof filters[i].term != 'undefined' ) {
+				for ( var fld in filters[i].term ) {
+					if ( fld == this.facetName )
+						tags.push( filters[i].term[fld] );
+				}
+			}
+		}
+
+		//build the list of autocomplete fields
+		var i = 0;
+		var tag_data = _.map( this.avail_fields, function( v ) { 
+			return { id: v, text: v };
+		} );
+
+		this.$el.append( Mustache.render( this.template, { header: this.headerName, input_el_id: this.select_el } ) );
+		this.select_$el = $( '#' + this.select_el );
+		this.select_$el.attr( 'value', tags.join( ', ' ) );
+		this.select_$el.select2( { tags: tag_data, formatNoMatches: function() { return ''; } } );
+		this.select_$el.on( 'change', function( ev ) { 
+			var d = t.select_$el.select2( 'val' );
+			var kv = [];
+	
+			_.each( d, function( val ) {
+				kv.push( { field: t.facetName, term: val } );
+			} );
+
+			//since this should always have all the latest term filters, 
+			//we can just overwrite all the query term filters
+			t.model.setTermFilters( t.facetName, kv );
+			t.model.trigger( 'change' );
+			t.model.search();
+		} );
+	},
+
+});
+
+
 var esbbSearchBarView = Backbone.View.extend({
 	headerName: '',
+	buttonText: 'Search',
 	spinner: null,
 	spin_it: false,
-	template: '<p>Query: <input class="esbb-search-query" type="text" style="width=500px;"  /><a href="" class="esbb-search-button">Search</a></p>',
+	template: '<p>{{headerName}}<input class="esbb-search-query" type="text" style="width=500px;"  /><a href="" class="esbb-search-button">{{buttonText}}</a></p>',
 
 	events : {
 		'click .esbb-search-button' : 'search',
@@ -806,16 +970,20 @@ var esbbSearchBarView = Backbone.View.extend({
 	},
 
 	initialize: function() {
-		this.headerName = this.options.headerName;
+		if ( this.options.headerName )
+			this.headerName = this.options.headerName;
+		if ( this.options.buttonText )
+			this.buttonText = this.options.buttonText;
 		_.bindAll( this, 'render' );
 		this.model.bind('search:start', this.startSpin, this );
 		this.model.bind('search:end', this.stopSpin, this );
+		this.spin_it = this.model.searching;
 		this.render();
 	},
 	
 	render: function( note ) {
 		this.$el.empty();
-		this.$el.append( Mustache.render( this.template, { header: this.headerName } ) );
+		this.$el.append( Mustache.render( this.template, { headerName: this.headerName, buttonText: this.buttonText } ) );
 		this.$el.find( '.esbb-search-query' ).attr( 'value', this.model.getQueryString() ).focus();
 		this.spinner = $( '<div/>', { style: 'left:640px; top: -28px;' } );
 		this.spinner.spin( 'medium' );
@@ -858,9 +1026,19 @@ var esbbSearchBarView = Backbone.View.extend({
 var esbbSearchURLView = Backbone.View.extend({
 	baseURL: '',
 	template: '<input class="esbb-search-url" readonly="readonly" value="{{url}}"></input>',
+	pushstateSupported: false,
 
 	initialize: function() {
+		var t = this;
 		this.baseURL = this.options.baseURL;
+		this.pushstateSupported = ( 'function' == typeof( window.history.pushState ) );
+		if ( this.pushstateSupported ) {
+			window.onpopstate = function(e){
+	    	if( e.state ){
+					t.model.set( e.state );
+		    }
+			};
+		}
 		_.bindAll( this, 'render' );
 		this.model.bind('change', this.render, this );
 		this.render();
@@ -868,14 +1046,70 @@ var esbbSearchURLView = Backbone.View.extend({
 	
 	render: function( note ) {
 		this.$el.empty();
-		var url = this.baseURL;
 		var qs = this.model.getURLQueryString();
-		if ( qs != '' ) {
-			url += '?' + qs;
+		var url = document.location.href.split('?')[0] + '?' + qs + document.location.hash;
+
+		if ( this.pushstateSupported ) {
+			window.history.pushState( this.model.data, window.document.title, url);
+		}	else { 
+			this.$el.append( Mustache.render( this.template, 
+				{ url: url } 
+			) );
 		}
-		this.$el.append( Mustache.render( this.template, 
-			{ url: url } 
-		) );
+	}
+
+});
+
+
+var esbbSortView = Backbone.View.extend({
+	headerName: 'Sort | ',
+	sorts: [], //{ name: , data: }
+
+	initialize: function() {
+		var t = this;
+		if ( this.options.headerName )
+			this.headerName = this.options.headerName;
+		this.sorts = this.options.sorts;
+		
+
+		_.bindAll( this, 'render' );
+		this.model.bind('change', this.render, this );
+		this.render();
+	},
+	
+	render: function( note ) {
+		var t = this;
+		this.$el.empty();
+
+		var sort = this.model.getSort();
+		var selSort = -1;
+		for ( var i in this.sorts ) {
+			if ( JSON.stringify( this.sorts[i].data ) == JSON.stringify( sort ) )
+				selSort = i;
+		}	
+
+		var html = this.headerName + ' ';
+		for ( var i in this.sorts ) {
+			if ( i == selSort )
+				html += '<b><u>' + this.sorts[i].name + '</u></b>';
+			else
+				html += '<a class="esbb-sort-order" data-sort-index="' + i + 
+					'" href="" >' + this.sorts[i].name + '</a>';
+			if ( i != ( this.sorts.length - 1 ) )
+				html += ' | ';
+		}
+		this.$el.append( Mustache.render( html ) );
+
+		this.$el.find( "a.esbb-sort-order" ).click( function ( e ) {
+			var idx = $( e.currentTarget ).attr( 'data-sort-index' );
+			if ( t.sorts[idx] ) {
+				t.model.setSort( t.sorts[idx].data );
+				t.model.trigger('change');
+				t.model.search();
+			}
+			return false;
+		});
+
 	}
 
 });
