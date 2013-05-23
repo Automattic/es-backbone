@@ -9,7 +9,7 @@ Overview
 If your data is already indexed and you know a bit about the ElasticSearch API, then this library should allow you to build an interactive front end for doing faceted search. I've built three so far, and the last one took 35 minutes to build, debug, and deploy.
 
 It also uses flot to provide pretty interactive graphs as inspired by Shay's post here: 
-http://www.elasticsearch.org/blog/2011/05/13/data-visualization-with-elasticsearch-and-protovis.html
+http://www.elasticsearch.org/2011/05/13/data-visualization-with-elasticsearch-and-protovis/
 
 See examples/simple/simple.php for all the library dependencies. Those paths are probably not the best places to serve them from.
 
