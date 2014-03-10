@@ -4,7 +4,8 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 	index_type: '',
 	resultsModel: null,
 	searching: false,
-	
+	fieldNameMap: [], // [ { "user_field" : <name>, "index_field" : <name> }, ... ]
+
 	initialize: function() {
 	},
 
@@ -13,11 +14,19 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 		this.trigger( 'search:start' );
 		this.searching = true;
 
+		//rewrite the query, but don't want to display this for the user
+		var full_query = this.toJSON();
+		var query = this.getQueryString();
+		_.forEach( this.fieldNameMap, function( item ) {
+			query = query.replace( item.user_field, item.index_field );
+		} );
+		full_query.query.filtered.query.query_string.query = query;
+
 		$.ajax( {
 			url: t.ajax_url,
 			type: 'POST',
-			data: { 
-	 			'query': JSON.stringify( this.toJSON() ),
+			data: {
+	 			'query': JSON.stringify( full_query ),
 				'idx': this.index,
 				'type': this.index_type,
 			},
@@ -53,7 +62,12 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 
 	getQueryString: function() {
 		var curr = this.toJSON();
-		return curr.query.filtered.query.query_string.query;
+		var query = curr.query.filtered.query.query_string.query;
+		_.forEach( this.fieldNameMap, function( item ) {
+			query = query.replace( item.index_field, item.user_field );
+		} );
+
+		return query;
 	},
 
 	setSort: function( sort ) {
@@ -109,7 +123,7 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 		if ( typeof curr_filt.and == 'undefined' )
 			return false;
 		for ( var i in curr_filt.and ) {
-			if ( ( typeof curr_filt.and[i][facet_type] != 'undefined' ) && 
+			if ( ( typeof curr_filt.and[i][facet_type] != 'undefined' ) &&
 				( typeof curr_filt.and[i][facet_type][facet_name] != 'undefined' ) )
 				return curr_filt.and[i][facet_type][facet_name];
 		}
@@ -160,11 +174,11 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 	addRangeFilter: function( field, from, to ) {
 		var curr_filt = this.getFiltersForChanging();
 		var a = {};
-		if ( from && to ) 
+		if ( from && to )
 			a[ field ] = { from: from, to: to, include_upper: false };
-		else if ( from ) 
+		else if ( from )
 			a[ field ] = { from: from, include_upper: false };
-		else if ( to ) 
+		else if ( to )
 			a[ field ] = { to: to, include_upper: false };
 		else
 			return;
@@ -175,7 +189,7 @@ var esbbSearchQueryModel = Backbone.Model.extend({
 	removeFilter: function( facet_name, facet_type ) {
 		var curr_filt = this.getFiltersForChanging();
 		for ( var i in curr_filt ) {
-			if ( ( typeof curr_filt[i][facet_type] != 'undefined' ) && 
+			if ( ( typeof curr_filt[i][facet_type] != 'undefined' ) &&
 					 ( typeof curr_filt[i][facet_type][facet_name] != 'undefined' ) ) {
 				curr_filt.splice( i, 1 );
 				i--;
@@ -231,7 +245,7 @@ var esbbSearchResultsModel = Backbone.Model.extend({
 
 	initialize: function() {
 	},
-		
+
 });
 
 
@@ -276,7 +290,7 @@ var esbbSearchResultsView = Backbone.View.extend({
 		}
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		var t = this;
 		this.$el.empty();
@@ -294,7 +308,7 @@ var esbbSearchResultsView = Backbone.View.extend({
 
 			this.$el.append( Mustache.render( this.template, data ) );
 		} else {
-			if ( t.model.hasError ) 
+			if ( t.model.hasError )
 				this.$el.append( Mustache.render( this.templateError, results ) );
 			else
 				this.$el.append( Mustache.render( this.templateNoResults, { header: this.header } ) );
@@ -328,7 +342,7 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 		this.model.bind( 'change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		var t = this;
 		if ( ! this.model.hasResults ) {
@@ -364,12 +378,12 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 			var options = {
 				yaxis: { mode: "time", tickLength: 5 },
 				selection: { mode: "y" },
-				grid: { 
+				grid: {
 					hoverable: true,
 					clickable: true
 				 },
-				series: { 
-					bars: { 
+				series: {
+					bars: {
 						show: true,
 						horizontal: true,
 						barWidth: 24 * 60 * 60 * 1000 * this.facetInterval
@@ -380,12 +394,12 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 			var options = {
 				xaxis: { mode: "time", tickLength: 5 },
 				selection: { mode: "x" },
-				grid: { 
+				grid: {
 					hoverable: true,
 					clickable: true
 				 },
-				series: { 
-					bars: { 
+				series: {
+					bars: {
 						show: true,
 						barWidth: 24 * 60 * 60 * 1000 * this.facetInterval
 					}
@@ -526,7 +540,7 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 		this.model.bind('change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		var t = this;
 		if ( ! this.model.hasResults ) {
@@ -546,13 +560,13 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 			case 'range':
 				data = this.calcRangeData( facet );
 				break;
-		}			
+		}
 
 		$.plot( this.$el, data, {
 			series: {
-				pie: { 
+				pie: {
 					show: true,
-					label: { 
+					label: {
 						show: false
 					}
 				}
@@ -572,7 +586,7 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 				return;
 			var percent = parseFloat( obj.series.percent ).toFixed(2);
 			t.$el.find( '.esbb-pie-hover' ).html(
-				'<span style="font-weight: bold; color: ' + obj.series.color + '">' + 
+				'<span style="font-weight: bold; color: ' + obj.series.color + '">' +
 				obj.series.label + ' (' + percent + '%)</span>'
 			);
 		} );
@@ -623,8 +637,8 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 			else if ( i.to ) {
 				label = 'less than ' + i.to;
 			}
-			return { 
-				label: label, 
+			return {
+				label: label,
 				data: i.count,
 				from: i.from,
 				to: i.to,
@@ -642,6 +656,7 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 var esbbSearchFacetSelectView = Backbone.View.extend({
 	el: '#esbb-facet-selector',
 	facetName: '',
+	filterName: null,
 	headerName: '',
 	searchQueryModel: null,
 	template: '\
@@ -666,6 +681,9 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 
 	initialize: function() {
 		this.facetName = this.options.facetName;
+		this.filterName = this.options.filterName;
+		if ( null == this.filterName )
+			this.filterName = this.facetName;
 		this.divName = this.options.divName;
 		this.headerName = this.options.headerName;
 		this.searchQueryModel = this.options.searchQueryModel;
@@ -673,7 +691,7 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 		this.model.bind( 'change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function() {
 		this.$el.empty();
 		var data = { header : this.headerName, items : [] };
@@ -682,17 +700,17 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 			switch ( facet_data._type ) {
 				case 'terms' :
 					_.forEach( facet_data.terms, function( item ) {
-						data['items'].push( { 
-							name : item.term, 
-							count : item.count, 
+						data['items'].push( {
+							name : item.term,
+							count : item.count,
 							perc: ( item.count / facet_data.total * 100 ).toFixed(2)
 						} );
 					});
 					if ( facet_data.other > 0 )
-						data['items'].push( { 
-							name: 'Others', 
-							count: facet_data.other, 
-							perc: ( facet_data.other / facet_data.total * 100 ).toFixed(2) 
+						data['items'].push( {
+							name: 'Others',
+							count: facet_data.other,
+							perc: ( facet_data.other / facet_data.total * 100 ).toFixed(2)
 						} );
 					break;
 				default:
@@ -707,10 +725,10 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 
 	select: function( ev ) {
 		ev.preventDefault();
-		this.searchQueryModel.addTermFilter( this.facetName, $( ev.currentTarget ).attr('href') );
+		this.searchQueryModel.addTermFilter( this.filterName, $( ev.currentTarget ).attr('href') );
 		this.searchQueryModel.trigger('change');
 		this.searchQueryModel.search( this.model );
-	} 
+	}
 
 });
 
@@ -735,13 +753,13 @@ var esbbSearchFilterSelectView = Backbone.View.extend({
 		this.model.bind('change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function() {
 		var t = this;
 		if ( this.select_$el )
 			this.select_$el.select2('destroy');
 		this.$el.empty();
-	
+
 		var filters = this.model.getFilters();
 		var tags = [];
 		for ( var i in filters ) {
@@ -767,7 +785,7 @@ var esbbSearchFilterSelectView = Backbone.View.extend({
 
 		//build the list of autocomplete fields
 		var i = 0;
-		var tag_data = _.map( this.avail_fields, function( v ) { 
+		var tag_data = _.map( this.avail_fields, function( v ) {
 			return { id: v, text: v };
 		} );
 
@@ -775,7 +793,7 @@ var esbbSearchFilterSelectView = Backbone.View.extend({
 		this.select_$el = $( '#' + this.select_el );
 		this.select_$el.attr( 'value', tags.join( ', ' ) );
 		this.select_$el.select2( { tags: tag_data } );
-		this.select_$el.change( function() { 
+		this.select_$el.change( function() {
 			//check the input, must be 'fld:term'
 			var d = t.select_$el.select2( 'val' );
 			var kv = [];
@@ -793,7 +811,7 @@ var esbbSearchFilterSelectView = Backbone.View.extend({
 			}
 
 			t.$el.find( '.esbb-filter-sel-error' ).hide();
-			//since this should always have all the latest term filters, 
+			//since this should always have all the latest term filters,
 			//we can just overwrite all the query term filters
 			t.model.setAllTermFilters( kv );
 			t.model.trigger( 'change' );
@@ -819,7 +837,7 @@ var esbbSearchDateRangePickerView = Backbone.View.extend({
 		this.model.bind('change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		var t = this;
 		this.$el.empty();
@@ -910,13 +928,13 @@ var esbbSearchFilterTermsSelectorView = Backbone.View.extend({
 		this.model.bind('change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function() {
 		var t = this;
 		if ( this.select_$el )
 			this.select_$el.select2('destroy');
 		this.$el.empty();
-	
+
 		var filters = this.model.getFilters();
 		var tags = [];
 		for ( var i in filters ) {
@@ -930,7 +948,7 @@ var esbbSearchFilterTermsSelectorView = Backbone.View.extend({
 
 		//build the list of autocomplete fields
 		var i = 0;
-		var tag_data = _.map( this.avail_fields, function( v ) { 
+		var tag_data = _.map( this.avail_fields, function( v ) {
 			return { id: v, text: v };
 		} );
 
@@ -938,15 +956,15 @@ var esbbSearchFilterTermsSelectorView = Backbone.View.extend({
 		this.select_$el = $( '#' + this.select_el );
 		this.select_$el.attr( 'value', tags.join( ', ' ) );
 		this.select_$el.select2( { tags: tag_data, formatNoMatches: function() { return ''; } } );
-		this.select_$el.on( 'change', function( ev ) { 
+		this.select_$el.on( 'change', function( ev ) {
 			var d = t.select_$el.select2( 'val' );
 			var kv = [];
-	
+
 			_.each( d, function( val ) {
 				kv.push( { field: t.facetName, term: val } );
 			} );
 
-			//since this should always have all the latest term filters, 
+			//since this should always have all the latest term filters,
 			//we can just overwrite all the query term filters
 			t.model.setTermFilters( t.facetName, kv );
 			t.model.trigger( 'change' );
@@ -962,10 +980,13 @@ var esbbSearchBarView = Backbone.View.extend({
 	buttonText: 'Search',
 	spinner: null,
 	spin_it: false,
+	enable_show_all: true,
 	template: '<p>{{headerName}}<input class="esbb-search-query" type="text" style="width=500px;"  /><a href="" class="esbb-search-button">{{buttonText}}</a></p>',
+	templateShowAll: '<p>{{headerName}}<input class="esbb-search-query" type="text" style="width=500px;"  /><a href="" class="esbb-search-button">{{buttonText}}</a><a href="" class="esbb-search-button-all">Show All</a></p>',
 
 	events : {
 		'click .esbb-search-button' : 'search',
+		'click .esbb-search-button-all' : 'search_all',
 		'keyup .esbb-search-query' : 'setQuery'
 	},
 
@@ -980,10 +1001,13 @@ var esbbSearchBarView = Backbone.View.extend({
 		this.spin_it = this.model.searching;
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		this.$el.empty();
-		this.$el.append( Mustache.render( this.template, { headerName: this.headerName, buttonText: this.buttonText } ) );
+		var temp = this.template;
+		if ( this.enable_show_all )
+			temp = this.templateShowAll;
+		this.$el.append( Mustache.render( temp, { headerName: this.headerName, buttonText: this.buttonText } ) );
 		this.$el.find( '.esbb-search-query' ).attr( 'value', this.model.getQueryString() ).focus();
 		this.spinner = $( '<div/>', { style: 'left:640px; top: -28px;' } );
 		this.spinner.spin( 'medium' );
@@ -999,6 +1023,15 @@ var esbbSearchBarView = Backbone.View.extend({
 			ev.preventDefault();
 			this.setQuery( null );
 		}
+		this.setQueryVal();
+		this.model.search();
+	},
+
+	search_all: function( ev ) {
+		ev.preventDefault();
+		this.model.setQueryString( '*' );
+		this.$el.find( '.esbb-search-query' ).attr( 'value', this.model.getQueryString() );
+		this.model.trigger( 'change' );
 		this.model.search();
 	},
 
@@ -1013,10 +1046,15 @@ var esbbSearchBarView = Backbone.View.extend({
 	},
 
 	setQuery: function ( ev ) {
+		if ( ( ev != undefined ) && ( ev.keyCode == 13 ) ) { //enter key
+			this.setQueryVal();
+			this.search( null );
+		}
+	},
+
+	setQueryVal: function() {
 		var query = this.$el.find( '.esbb-search-query' ).val();
 		this.model.setQueryString( query );
-		if ( ( ev != undefined ) && ( ev.keyCode == 13 ) ) //enter key
-			this.search( null );
 		this.model.trigger( 'change' );
 	}
 
@@ -1043,7 +1081,7 @@ var esbbSearchURLView = Backbone.View.extend({
 		this.model.bind('change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		this.$el.empty();
 		var qs = this.model.getURLQueryString();
@@ -1051,9 +1089,9 @@ var esbbSearchURLView = Backbone.View.extend({
 
 		if ( this.pushstateSupported ) {
 			window.history.pushState( this.model.data, window.document.title, url);
-		}	else { 
-			this.$el.append( Mustache.render( this.template, 
-				{ url: url } 
+		}	else {
+			this.$el.append( Mustache.render( this.template,
+				{ url: url }
 			) );
 		}
 	}
@@ -1070,13 +1108,13 @@ var esbbSortView = Backbone.View.extend({
 		if ( this.options.headerName )
 			this.headerName = this.options.headerName;
 		this.sorts = this.options.sorts;
-		
+
 
 		_.bindAll( this, 'render' );
 		this.model.bind('change', this.render, this );
 		this.render();
 	},
-	
+
 	render: function( note ) {
 		var t = this;
 		this.$el.empty();
@@ -1086,14 +1124,14 @@ var esbbSortView = Backbone.View.extend({
 		for ( var i in this.sorts ) {
 			if ( JSON.stringify( this.sorts[i].data ) == JSON.stringify( sort ) )
 				selSort = i;
-		}	
+		}
 
 		var html = this.headerName + ' ';
 		for ( var i in this.sorts ) {
 			if ( i == selSort )
 				html += '<b><u>' + this.sorts[i].name + '</u></b>';
 			else
-				html += '<a class="esbb-sort-order" data-sort-index="' + i + 
+				html += '<a class="esbb-sort-order" data-sort-index="' + i +
 					'" href="" >' + this.sorts[i].name + '</a>';
 			if ( i != ( this.sorts.length - 1 ) )
 				html += ' | ';
