@@ -355,14 +355,15 @@ var esbbSearchFacetTimelineView = Backbone.View.extend({
 
 	render: function( note ) {
 		var t = this;
-		if ( ! this.model.hasResults ) {
+		var facets = this.model.get('facets');
+		if ( ! facets  ) {
 			this.$el.empty();
 			this.$el.hide();
 			return;
 		}
 		this.$el.show();
 
-		var data = _.map( this.model.get('facets')[this.facetName].entries, function( d ) {
+		var data = _.map( facets[this.facetName].entries, function( d ) {
 			if ( t.horizontal )
 				return [ d.count, d.time ];
 			else
@@ -553,7 +554,8 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 
 	render: function( note ) {
 		var t = this;
-		if ( ! this.model.hasResults ) {
+		var facets = this.model.get('facets');
+		if ( ! facets  ) {
 			this.$el.empty();
 			this.$el.hide();
 			return;
@@ -561,7 +563,7 @@ var esbbSearchFacetPieView = Backbone.View.extend({
 
 		this.$el.show();
 
-		var facet = this.model.get('facets')[this.facetName]
+		var facet = facets[this.facetName]
 		var data = [];
 		switch( this.facetType ) {
 			case 'terms':
@@ -705,8 +707,9 @@ var esbbSearchFacetSelectView = Backbone.View.extend({
 	render: function() {
 		this.$el.empty();
 		var data = { header : this.headerName, items : [] };
-		if ( this.model.hasResults ) {
-			var facet_data = this.model.get('facets')[ this.facetName ];
+		var facets = this.model.get('facets');
+		if ( facets  ) {
+			var facet_data = facets[ this.facetName ];
 			switch ( facet_data._type ) {
 				case 'terms' :
 					_.forEach( facet_data.terms, function( item ) {
